@@ -1,0 +1,65 @@
+name: Deploy App to EKS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: ap-south-1
+      EKS_CLUSTER: dev-eks-cluster
+      ECR_REPOSITORY: devops-production-app
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region $AWS_REGION | \
+          docker login --username AWS --password-stdin \
+          833516483290.dkr.ecr.$AWS_REGION.amazonaws.com
+
+      - name: Build Docker Image
+        run: |
+          docker build -t $ECR_REPOSITORY ./app
+
+      - name: Tag Image
+        run: |
+          docker tag $ECR_REPOSITORY:latest \
+          833516483290.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+
+      - name: Push Image
+        run: |
+          docker push \
+          833516483290.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $EKS_CLUSTER
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl create deployment devops-app \
+            --image=833516483290.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl expose deployment devops-app \
+            --type=LoadBalancer \
+            --port=5000 \
+            --dry-run=client -o yaml | kubectl apply -f -
