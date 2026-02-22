@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -12,6 +13,7 @@ jobs:
       AWS_REGION: ap-south-1
       EKS_CLUSTER: dev-eks-cluster
       ECR_REPOSITORY: devops-production-app
+      AWS_ACCOUNT_ID: 833516483290
 
     steps:
       - name: Checkout Code
@@ -28,21 +30,21 @@ jobs:
         run: |
           aws ecr get-login-password --region $AWS_REGION | \
           docker login --username AWS --password-stdin \
-          833516483290.dkr.ecr.$AWS_REGION.amazonaws.com
+          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
       - name: Build Docker Image
         run: |
-          docker build -t $ECR_REPOSITORY ./app
+          docker build -t $ECR_REPOSITORY ./app/source-code
 
       - name: Tag Image
         run: |
           docker tag $ECR_REPOSITORY:latest \
-          833516483290.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
 
       - name: Push Image
         run: |
           docker push \
-          833516483290.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
 
       - name: Update kubeconfig
         run: |
@@ -53,7 +55,7 @@ jobs:
       - name: Deploy to Kubernetes
         run: |
           kubectl create deployment devops-app \
-            --image=833516483290.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest \
+            --image=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest \
             --dry-run=client -o yaml | kubectl apply -f -
 
           kubectl expose deployment devops-app \
