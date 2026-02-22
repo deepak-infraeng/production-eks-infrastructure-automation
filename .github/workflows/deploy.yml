@@ -36,7 +36,6 @@ jobs:
         run: |
           docker build -t $ECR_REPOSITORY ./terraform/app
 
-
       - name: Tag Image
         run: |
           docker tag $ECR_REPOSITORY:latest \
@@ -53,13 +52,16 @@ jobs:
             --region $AWS_REGION \
             --name $EKS_CLUSTER
 
-      - name: Deploy to Kubernetes
+      - name: Apply Kubernetes Manifests
         run: |
-          kubectl create deployment devops-app \
-            --image=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest \
-            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f kubernetes/deployments/
+          kubectl apply -f kubernetes/services/
 
-          kubectl expose deployment devops-app \
-            --type=LoadBalancer \
-            --port=5000 \
-            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Update Deployment Image
+        run: |
+          kubectl set image deployment/devops-app \
+            devops-app=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+
+      - name: Verify Rollout
+        run: |
+          kubectl rollout status deployment/devops-app
